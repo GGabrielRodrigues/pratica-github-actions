@@ -1,9 +1,0 @@
-/home/gabriel/Faculdade/6-periodo/persistencia-dados/lab07/LaboratorioPersistenciaGabriel/src/main/java/br/edu/universidade/dao/AlunoDAO.java
-/home/gabriel/Faculdade/6-periodo/persistencia-dados/lab07/LaboratorioPersistenciaGabriel/src/main/java/br/edu/universidade/dao/AlunoDAOImpl.java
-/home/gabriel/Faculdade/6-periodo/persistencia-dados/lab07/LaboratorioPersistenciaGabriel/src/main/java/br/edu/universidade/dao/ProfessorDAO.java
-/home/gabriel/Faculdade/6-periodo/persistencia-dados/lab07/LaboratorioPersistenciaGabriel/src/main/java/br/edu/universidade/dao/ProfessorDAOImpl.java
-/home/gabriel/Faculdade/6-periodo/persistencia-dados/lab07/LaboratorioPersistenciaGabriel/src/main/java/br/edu/universidade/factory/ConnectionFactory.java
-/home/gabriel/Faculdade/6-periodo/persistencia-dados/lab07/LaboratorioPersistenciaGabriel/src/main/java/br/edu/universidade/model/Aluno.java
-/home/gabriel/Faculdade/6-periodo/persistencia-dados/lab07/LaboratorioPersistenciaGabriel/src/main/java/br/edu/universidade/model/Professor.java
-/home/gabriel/Faculdade/6-periodo/persistencia-dados/lab07/LaboratorioPersistenciaGabriel/src/main/java/br/edu/universidade/servlet/AlunoServlet.java
-/home/gabriel/Faculdade/6-periodo/persistencia-dados/lab07/LaboratorioPersistenciaGabriel/src/main/java/br/edu/universidade/servlet/ProfessorServlet.java

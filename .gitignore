@@ -1,0 +1,22 @@
+target/
+*.class
+*.war
+*.jar
+
+# Logs
+*.log
+
+# IDEs
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Reports
+jacoco.exec

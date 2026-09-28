@@ -1,0 +1,168 @@
+name: Pipeline CI/CD - Persistência Universitária
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  # =========================================================================
+  # JOB 1: INTEGRAÇÃO CONTÍNUA (CI) & ANÁLISE ESTÁTICA (SAST)
+  # =========================================================================
+  build-and-static-analysis:
+    name: "CI: Build, Testes e Análise Estática (SAST)"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Checkout do Código
+        uses: actions/checkout@v4
+
+      - name: 2. Configurar JDK 17 (Eclipse Temurin)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: 3. Análise Estática de Código (SAST - SpotBugs)
+        run: |
+          echo "Executando análise estática de bugs e boas práticas com SpotBugs..."
+          mvn compile spotbugs:check
+
+      - name: 4. Testes Automatizados Dinâmicos e Cobertura (JUnit 5 + JaCoCo)
+        run: |
+          echo "Executando testes unitários e gerando relatório de cobertura de código..."
+          mvn test jacoco:report
+
+      - name: 5. Análise Estática de Vulnerabilidades em Dependências (SAST - Trivy)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+          exit-code: '0'
+
+      - name: 6. Empacotar Aplicação (Gerar WAR)
+        run: mvn package -DskipTests
+
+      - name: 7. Publicar Artefato WAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-war
+          path: target/LaboratorioPersistenciaGabriel.war
+          retention-days: 7
+
+  # =========================================================================
+  # JOB 2: ENTREGA CONTÍNUA (CD) - AMBIENTE 1: STAGING (HOMOLOGAÇÃO & DAST)
+  # =========================================================================
+  deploy-staging:
+    name: "CD: Deploy em Staging & Análise Dinâmica (DAST)"
+    needs: build-and-static-analysis
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: http://localhost:8081
+
+    steps:
+      - name: 1. Checkout do Código
+        uses: actions/checkout@v4
+
+      - name: 2. Baixar Artefato WAR compilado
+        uses: actions/download-artifact@v4
+        with:
+          name: app-war
+          path: target/
+
+      - name: 3. Subir Aplicação no Ambiente de Staging (Docker Compose)
+        run: |
+          echo "Iniciando contêineres de Staging (Porta 8081)..."
+          APP_PORT=8081 DB_PORT=5433 docker compose up -d --build
+
+      - name: 4. Verificação Dinâmica de Disponibilidade (Smoke Test / Healthcheck)
+        run: |
+          echo "Aguardando aplicação inicializar no Tomcat..."
+          for i in {1..20}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/ || echo "000")
+            if [ "$STATUS" -eq 200 ] || [ "$STATUS" -eq 302 ]; then
+              echo "Aplicação respondendo com sucesso (HTTP $STATUS) no Ambiente de Staging!"
+              exit 0
+            fi
+            echo "Tentativa $i: HTTP $STATUS. Aguardando 5 segundos..."
+            sleep 5
+          done
+          echo "Falha no healthcheck dinâmico: aplicação não respondeu a tempo."
+          docker compose logs
+          exit 1
+
+      - name: 5. Análise Dinâmica de Segurança (DAST - OWASP ZAP Baseline Scan)
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: 'http://localhost:8081/'
+          fail_action: false
+          allow_issue_writing: false
+
+      - name: 6. Limpeza do Ambiente de Staging
+        if: always()
+        run: |
+          echo "Encerrando contêineres de Staging..."
+          APP_PORT=8081 DB_PORT=5433 docker compose down -v
+
+  # =========================================================================
+  # JOB 3: ENTREGA CONTÍNUA (CD) - AMBIENTE 2: PRODUCTION (PRODUÇÃO)
+  # =========================================================================
+  deploy-production:
+    name: "CD: Deploy em Produção (Ambiente 2: Production)"
+    needs: [build-and-static-analysis, deploy-staging]
+    runs-on: ubuntu-latest
+    # Observação: Para executar em um servidor local on-premise, pode-se usar:
+    # runs-on: self-hosted
+    environment:
+      name: production
+      url: http://localhost:8080
+
+    steps:
+      - name: 1. Checkout do Código
+        uses: actions/checkout@v4
+
+      - name: 2. Baixar Artefato WAR compilado
+        uses: actions/download-artifact@v4
+        with:
+          name: app-war
+          path: target/
+
+      - name: 3. Subir Aplicação em Produção (Docker Compose)
+        run: |
+          echo "Realizando Deploy em Produção (Porta 8080)..."
+          APP_PORT=8080 DB_PORT=5432 docker compose up -d --build
+
+      - name: 4. Verificação Dinâmica Pós-Deploy em Produção (Smoke Test)
+        run: |
+          echo "Verificando se a aplicação de Produção está ativa..."
+          for i in {1..20}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/ || echo "000")
+            if [ "$STATUS" -eq 200 ] || [ "$STATUS" -eq 302 ]; then
+              echo "Deploy em Produção concluído e validado com sucesso (HTTP $STATUS)!"
+              exit 0
+            fi
+            echo "Tentativa $i: HTTP $STATUS. Aguardando 5 segundos..."
+            sleep 5
+          done
+          echo "Falha ao validar deploy de produção."
+          docker compose logs
+          exit 1
+
+      - name: 5. Resumo da Publicação
+        run: |
+          echo "=========================================="
+          echo "✅ DEPLOY EM PRODUÇÃO FINALIZADO COM SUCESSO"
+          echo "Ambiente: Produção (Porta 8080)"
+          echo "Status dos contêineres:"
+          docker compose ps
+          echo "=========================================="
