@@ -86,16 +86,6 @@ flowchart TD
 
 ---
 
-## ❓ Consideração sobre os Dois Ambientes
-
-Na especificação da atividade, a exigência de usar **dois ambientes** pode se referir a:
-1. **Ambientes do Ciclo de Entrega (Staging vs Produção):** Abordagem principal implementada nativamente neste projeto através dos blocos `environment: staging` e `environment: production` com portas e ciclos de vida independentes.
-2. **Ambientes de Execução de Infraestrutura (Cloud Runner vs Self-Hosted Runner):** Caso a avaliação requeira execução local, o job de produção pode ser alternado de `runs-on: ubuntu-latest` para `runs-on: self-hosted`.
-
-Ambas as abordagens estão contempladas e suportadas pela arquitetura deste repositório.
-
----
-
 ## 🚀 Como Executar Localmente
 
 ### Usando o Makefile (Recomendado)
