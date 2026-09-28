@@ -1,101 +1,126 @@
-# Laboratório de Persistência e Pipeline CI/CD
+# Sistema Universitário — Gestão de Alunos e Professores & Pipeline CI/CD
 
-Repositório dedicado à disciplina de **Implantação e Entrega Contínua de Software**, implementando um pipeline automatizado de **CI/CD** com **GitHub Actions**, conteinerização com **Docker & Docker Compose**, e testes de segurança e qualidade com **análise estática (SAST)** e **análise dinâmica (DAST)**.
+Este repositório contém uma aplicação web Java para gerenciamento acadêmico e a implementação completa de um pipeline automatizado de **CI/CD** no **GitHub Actions**, integrando análise estática (SAST), análise dinâmica (DAST), conteinerização com **Docker** e múltiplos ambientes de implantação.
+
+> **Nota de Origem do Projeto:**  
+> Este projeto foi originalmente desenvolvido a partir de uma atividade prática da disciplina de **Software para Persistência de Dados**, ministrada pelo professor **Elias Batista**. Ele foi adaptado e utilizado neste repositório para a atividade prática da disciplina de **Implantação e Entrega Contínua de Software**.
 
 ---
 
-## 🏗️ Visão Geral da Arquitetura do Pipeline
+## 📖 Sobre a Aplicação
 
-O pipeline foi estruturado em **3 Jobs principais** cobrindo os conceitos de Integração Contínua (CI) e Entrega Contínua (CD), passando por dois ambientes distintos:
+A aplicação é um sistema web clássico construído com **Java 17**, baseado no padrão arquitetural MVC (Model-View-Controller) e padrão DAO (Data Access Object), rodando sobre a especificação **Jakarta EE (Servlet API 6.0 e JSTL 3.0)** no servidor de aplicação **Apache Tomcat 10+**.
+
+O objetivo principal do sistema é realizar as operações fundamentais de persistência de dados em um banco **PostgreSQL**, oferecendo:
+- **Gestão de Alunos:** Cadastro, listagem em tabela, edição e exclusão de discentes (armazenando identificador, nome, e-mail e curso).
+- **Gestão de Professores:** Cadastro, listagem, edição e exclusão de docentes (armazenando identificador, nome, data de nascimento, naturalidade, sexo e link do currículo Lattes).
+- **Interface Web:** Telas renderizadas dinamicamente via JSP com folhas de estilo modernas (`css/style.css`).
+- **Conexão Dinâmica:** Fábrica de conexões JDBC (`ConnectionFactory`) capaz de se adaptar automaticamente a variáveis de ambiente ou usar parâmetros locais por padrão.
+
+---
+
+## 🛠️ Comandos Automatizados via Makefile
+
+Para facilitar o ciclo de vida local do desenvolvedor e reproduzir cada etapa do pipeline sem depender da nuvem, foi disponibilizado um `Makefile` com tarefas bem definidas:
+
+| Comando | Descrição |
+| :--- | :--- |
+| `make static-analysis` | Compila o projeto e executa as verificações estáticas de código com SpotBugs, JUnit 5 e relatório JaCoCo. |
+| `make staging-dast` | Sobe o ambiente de Staging na porta 8081 via Docker Compose, efetua os testes dinâmicos de fumaça e auditoria DAST, e encerra o ambiente. |
+| `make prod` | Constrói e sobe a aplicação no ambiente de produção local (porta 8080) com banco PostgreSQL integrado. |
+| `make all` | Executa todas as etapas anteriores em sequência: análise estática, testes em staging e implantação final em produção. |
+| `make stop` | Encerra e remove todos os contêineres e volumes ativos de Staging e Produção. |
+| `make clean` | Remove artefatos e diretórios temporários gerados pelo Maven. |
+
+---
+
+## 🏗️ Estrutura do Pipeline de CI/CD (GitHub Actions)
+
+O pipeline definido em `.github/workflows/ci-cd.yml` é disparado a cada `push` ou `pull request` para a branch `main`, dividindo o ciclo de entrega em três fases bem delimitadas:
 
 ```mermaid
 flowchart TD
     subgraph CI["1. CI - Integração Contínua & SAST"]
         A[Git Push / PR] --> B[Checkout & Setup JDK 17]
-        B --> C["SpotBugs (SAST - Código Java)"]
-        B --> D["JUnit 5 + JaCoCo (Testes & Cobertura)"]
-        B --> E["Trivy (SAST - Vulnerabilidades)"]
+        B --> C["SpotBugs (Análise Estática de Código)"]
+        B --> D["JUnit 5 + JaCoCo (Testes Unitários Dinâmicos)"]
+        B --> E["Trivy (Scanner Estático de Vulnerabilidades)"]
         C & D & E --> F[Maven Package: .war]
         F --> G[Upload do Artefato WAR]
     end
 
-    subgraph CD_Staging["2. CD - Ambiente 1: Staging (Homologação & DAST)"]
+    subgraph Staging["2. CD - Ambiente 1: Staging (Homologação & DAST)"]
         G --> H[Download do Artefato]
         H --> I["Deploy em Staging (Docker Compose :8081)"]
-        I --> J["Smoke Test / Healthcheck (curl)"]
+        I --> J["Smoke Test / Healthcheck Dinâmico (curl)"]
         J --> K["OWASP ZAP Baseline Scan (DAST Dinâmico)"]
         K --> L[Teardown do Ambiente Staging]
     end
 
-    subgraph CD_Prod["3. CD - Ambiente 2: Production (Produção)"]
+    subgraph Production["3. CD - Ambiente 2: Production (Produção)"]
         L --> M[Download do Artefato]
         M --> N["Deploy em Produção (Docker Compose :8080)"]
         N --> O["Smoke Test Pós-Deploy (:8080)"]
-        O --> P[Aplicação em Produção Ativa]
+        O --> P[Aplicação Ativa e Pronta para Uso]
     end
 ```
 
----
+### 1. Job `build-and-static-analysis` (CI & SAST)
+- Realiza o checkout do repositório e configura o JDK 17 com cache inteligente de dependências Maven.
+- Executa a análise estática com **SpotBugs** no bytecode Java para identificar más práticas e riscos de código.
+- Executa testes automatizados com **JUnit 5** e gera métricas de cobertura com **JaCoCo**.
+- Inspeciona o repositório e suas dependências com **Trivy** em busca de vulnerabilidades e CVEs conhecidas.
+- Gera o pacote `.war` final e o publica como artefato seguro do GitHub Actions.
 
-## ❓ Resposta sobre a Dúvida dos Dois Ambientes: *Cloud vs Self-Hosted ou Staging vs Produção?*
+### 2. Job `deploy-staging` (CD - Ambiente 1: Staging & DAST)
+- Utiliza o ambiente formal `staging` do GitHub Actions.
+- Sobe os contêineres em porta isolada (`8081` para a web e `5433` para o banco de teste).
+- Valida em tempo real a prontidão da aplicação através de *healthcheck* dinâmico via `curl`.
+- Executa a análise dinâmica de vulnerabilidades (DAST) contra a aplicação em execução com a ferramenta **OWASP ZAP Baseline Scan**.
+- Destrói os contêineres temporários de staging ao final do processo.
 
-> **Dúvida:** *"Sobre a questão dos dois ambiente, seria um self-hosted e outro cloud (do github)? Fiquei com essa dúvida"*
-
-Na engenharia de software e no ecossistema do **GitHub Actions**, a expressão **"ambientes"** pode ser abordada sob duas óticas fundamentais:
-
-1. **Ambientes Lógicos de Entrega (Staging & Production - Abordagem Principal):**
-   - É o padrão da indústria e a funcionalidade nativa do GitHub Actions (`environment: staging` e `environment: production`).
-   - **Ambiente 1 (Staging / Homologação):** Ambiente isolado onde a nova versão é testada dinamicamente com testes de fumaça e varredura DAST (OWASP ZAP) antes de qualquer impacto ao usuário final.
-   - **Ambiente 2 (Production / Produção):** Ambiente final onde a aplicação validada é promovida e disponibilizada para consumo real.
-   - Esse pipeline implementa nativamente esses dois ambientes no arquivo de workflow.
-
-2. **Ambientes de Infraestrutura de Execução (Runners: Cloud vs Self-Hosted):**
-   - **Cloud Runner (`runs-on: ubuntu-latest`):** A máquina virtual gerenciada na nuvem do GitHub, ideal para jobs de compilação, testes e validação.
-   - **Self-Hosted Runner (`runs-on: self-hosted`):** Um servidor ou máquina local configurada para executar jobs do GitHub Actions na infraestrutura própria.
-   - **Flexibilidade:** No job `deploy-production`, basta alterar `runs-on: ubuntu-latest` para `runs-on: self-hosted` caso o objetivo seja realizar a implantação fisicamente na máquina local do desenvolvedor ou servidor on-premise da instituição.
-
----
-
-## 🛠️ Ferramentas Utilizadas
-
-### 1. Verificação Estática (SAST - Static Application Security Testing)
-- **SpotBugs (`spotbugs-maven-plugin`):** Realiza a análise estática do bytecode Java em busca de más práticas, bugs em potencial e inconsistências (ex.: campos não serializáveis, tratamento indevido de exceções).
-- **Trivy (`aquasecurity/trivy-action`):** Scanner estático de segurança que inspeciona o repositório, bibliotecas e dependências declaradas em busca de vulnerabilidades conhecidas (CVEs).
-
-### 2. Verificação Dinâmica (DAST & Testes Automatizados em Tempo de Execução)
-- **JUnit 5 + JaCoCo:** Testes unitários dinâmicos que validam os modelos (`AlunoTest`, `ProfessorTest`) e calculam a cobertura de execução em tempo de teste.
-- **Healthcheck Dinâmico / Smoke Test (`curl`):** Script que efetua requisições HTTP reais contra a porta do container após o deploy para validar a resposta do Apache Tomcat (`HTTP 200/302`).
-- **OWASP ZAP Baseline Scan (`zaproxy/action-baseline`):** Scanner dinâmico de vulnerabilidades web (DAST) que ataca a aplicação em execução no ambiente de Staging para encontrar brechas (cabeçalhos de segurança ausentes, cookies inseguros, etc.).
+### 3. Job `deploy-production` (CD - Ambiente 2: Production)
+- Utiliza o ambiente formal `production` do GitHub Actions, dependendo da aprovação prévia dos estágios anteriores.
+- Realiza a implantação oficial via Docker Compose na porta `8080` com o banco PostgreSQL persistente na porta `5432`.
+- Valida o status do deploy confirmando resposta HTTP 200/302 da aplicação.
 
 ---
 
-## 📋 Detalhamento dos Jobs e Comandos
+## ❓ Consideração sobre os Dois Ambientes
 
-| Job | Ambiente | Comandos Principais | Objetivo |
-| :--- | :--- | :--- | :--- |
-| **`build-and-static-analysis`** | Cloud (`ubuntu-latest`) | `mvn compile spotbugs:check`<br>`mvn test jacoco:report`<br>`trivy fs .`<br>`mvn package -DskipTests` | Integração Contínua, testes unitários, análise de bugs e vulnerabilidades estáticas, e geração do pacote `.war`. |
-| **`deploy-staging`** | `staging` (`:8081`) | `APP_PORT=8081 DB_PORT=5433 docker compose up -d --build`<br>`curl -f http://localhost:8081/`<br>`action-baseline (OWASP ZAP)`<br>`docker compose down -v` | Implantação no primeiro ambiente, validação dinâmica de disponibilidade e auditoria DAST em tempo de execução. |
-| **`deploy-production`** | `production` (`:8080`) | `APP_PORT=8080 DB_PORT=5432 docker compose up -d --build`<br>`curl -f http://localhost:8080/` | Implantação oficial no ambiente final de produção e verificação pós-deploy. |
+Na especificação da atividade, a exigência de usar **dois ambientes** pode se referir a:
+1. **Ambientes do Ciclo de Entrega (Staging vs Produção):** Abordagem principal implementada nativamente neste projeto através dos blocos `environment: staging` e `environment: production` com portas e ciclos de vida independentes.
+2. **Ambientes de Execução de Infraestrutura (Cloud Runner vs Self-Hosted Runner):** Caso a avaliação requeira execução local, o job de produção pode ser alternado de `runs-on: ubuntu-latest` para `runs-on: self-hosted`.
+
+Ambas as abordagens estão contempladas e suportadas pela arquitetura deste repositório.
 
 ---
 
-## 🚀 Como Executar Localmente via Docker
+## 🚀 Como Executar Localmente
 
-Para rodar a aplicação completa (PostgreSQL + Tomcat 10) na sua máquina sem necessidade de instalar Java ou Postgres localmente:
+### Usando o Makefile (Recomendado)
+```bash
+# Executar a esteira completa localmente (análise estática, staging dinâmico e deploy de produção)
+make all
 
-### 1. Iniciar os serviços
+# Ou apenas subir em produção
+make prod
+```
+
+### Usando diretamente o Docker Compose
 ```bash
 docker compose up -d --build
 ```
 
-### 2. Acessar a aplicação
+Após a inicialização, os serviços estarão acessíveis nas seguintes rotas:
 - Página Inicial: [http://localhost:8080/](http://localhost:8080/)
+- Gestão de Alunos: [http://localhost:8080/alunos](http://localhost:8080/alunos)
 - Cadastro de Alunos: [http://localhost:8080/cadastro.jsp](http://localhost:8080/cadastro.jsp)
-- Lista de Alunos: [http://localhost:8080/aluno](http://localhost:8080/aluno)
+- Gestão de Professores: [http://localhost:8080/professores](http://localhost:8080/professores)
 - Cadastro de Professores: [http://localhost:8080/cadastro_professor.jsp](http://localhost:8080/cadastro_professor.jsp)
-- Lista de Professores: [http://localhost:8080/professor](http://localhost:8080/professor)
 
-### 3. Parar os serviços
+Para encerrar os serviços locais:
 ```bash
-docker compose down -v
+make stop
+# ou: docker compose down -v
 ```
