@@ -26,6 +26,8 @@ static-analysis:
 	@echo "--------------------------------------------------------------"
 	mvn compile spotbugs:check
 	mvn test jacoco:report
+	@echo "Executando varredura estática de vulnerabilidades com Trivy..."
+	docker run --rm -v $$(pwd):/project aquasec/trivy:latest fs --severity HIGH,CRITICAL --exit-code 0 /project
 	@echo "✅ Análise estática concluída com sucesso!"
 
 # 2. Deploy em Staging e Análise Dinâmica (DAST)

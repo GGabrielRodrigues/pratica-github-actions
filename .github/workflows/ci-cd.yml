@@ -41,13 +41,9 @@ jobs:
           mvn test jacoco:report
 
       - name: 5. Análise Estática de Vulnerabilidades em Dependências (SAST - Trivy)
-        uses: aquasecurity/trivy-action@v0.28.0
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          severity: 'HIGH,CRITICAL'
-          ignore-unfixed: true
-          exit-code: '0'
+        run: |
+          echo "Executando varredura estática de vulnerabilidades com Trivy via container oficial..."
+          docker run --rm -v ${{ github.workspace }}:/project aquasec/trivy:latest fs --severity HIGH,CRITICAL --exit-code 0 /project
 
       - name: 6. Empacotar Aplicação (Gerar WAR)
         run: mvn package -DskipTests
